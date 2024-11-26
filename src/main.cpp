@@ -13,31 +13,14 @@ Distributed as-is; no warranty is given.
 // Enable Debug interface and serial prints over UART1
 #define DEBUG_ESP
 
-// Blynk related Libs
 #include <WiFi.h>
-#include <WiFiClient.h>
-//#include <BlynkSimpleEsp32.h>
-#include <TimeLib.h>
-//#include <WidgetRTC.h>
-
 #include "esp_camera.h"
-#include "esp_timer.h"
-#include "img_converters.h"
-
-#include "esp_http_server.h"
-#include "fb_gfx.h"
-//#include "fd_forward.h"
-//#include "fr_forward.h"
-//#include "soc/soc.h"           //disable brownout problems
-//#include "soc/rtc_cntl_reg.h"  //disable brownout problems
-#include "dl_lib.h"
-
 #include "config.h"
 
 // Connection timeout;
 #define CON_TIMEOUT   20*1000                     // milliseconds
 
-#define TIME_TO_SLEEP (uint64_t)2*60*1000*1000   // microseconds
+#define TIME_TO_SLEEP_DEFAULT (uint64_t)2*60*1000*1000   // microseconds
 
 #ifdef DEBUG_ESP
   #define DBG(x) Serial.println(x)
@@ -47,9 +30,6 @@ Distributed as-is; no warranty is given.
 
 // FTP Client Lib
 #include "ESP32_FTPClient.h"
-
-// Go to the Project Settings (nut icon) and get Auth Token in the Blynk App.
-char auth[] = "";
 
 // Your WiFi credentials.
 char ssid[] = mySSID;
@@ -64,21 +44,13 @@ char ftp_pass[]   = FTPpass;
 camera_fb_t *fb = NULL;
 String pic_name = "parking.jpg";
 
-// Variable marked with this attribute will keep its value during a deep sleep / wake cycle.
 RTC_DATA_ATTR uint64_t bootCount = 0;
 
-//WidgetRTC rtc;
 ESP32_FTPClient ftp (ftp_server, ftp_user, ftp_pass);
 
 void deep_sleep(void);
 void FTP_upload( void );
 bool take_picture(void);
-
-//BLYNK_CONNECTED()
-//{
-//  // Synchronize time on connection
-//  rtc.begin();
-//}
 
 void setup()
 {
@@ -132,14 +104,14 @@ void setup()
     return;
   }
 
-  // Change extra settings if required
-  //sensor_t * s = esp_camera_sensor_get();
-  //s->set_vflip(s, 0);       //flip it back
-  //s->set_brightness(s, 1);  //up the blightness just a bit
-  //s->set_saturation(s, -2); //lower the saturation
+  //Change extra settings if required
+  sensor_t * s = esp_camera_sensor_get();
+  s->set_vflip(s, 0);       //flip it back
+  s->set_brightness(s, 1);  //up the blightness just a bit
+  s->set_saturation(s, -2); //lower the saturation
   
   // Enable timer wakeup for ESP32 sleep
-  esp_sleep_enable_timer_wakeup( TIME_TO_SLEEP );
+  esp_sleep_enable_timer_wakeup( TIME_TO_SLEEP_DEFAULT );
 
   WiFi.begin( ssid, pass );
   DBG("\nConnecting to WiFi");
@@ -221,11 +193,35 @@ void FTP_upload()
   
   //Create a file and write the image data to it;
   ftp.InitFile("Type I");
-  ftp.ChangeWorkDir("/media/"); // change it to reflect your directory
+  ftp.ChangeWorkDir("/share/parking_camera/"); // change it to reflect your directory
   const char *f_name = pic_name.c_str();
   ftp.NewFile( f_name );
   ftp.WriteData(fb->buf, fb->len);
   ftp.CloseFile();
+
+  uint64_t NextSleepTime = TIME_TO_SLEEP_DEFAULT;
+  String list;
+  ftp.ContentList("/share/parking_camera/", &list);
+  DBG("Directory listing:");
+  DBG(list);
+  // Search for file with "sec" in the name and parse the number
+  int startIndex = list.indexOf("sec");
+  if (startIndex != -1) {
+    int endIndex = list.indexOf("\n", startIndex);
+    if (endIndex == -1) {
+      endIndex = list.length();
+    }
+    String secFileName = list.substring(startIndex, endIndex);
+    String secNumberStr = secFileName.substring(3); // Extract the number part
+    NextSleepTime = secNumberStr.toInt(); // Convert to uint16_t
+    DBG("Found sec file: " + secFileName + " with number: " + String(NextSleepTime));
+  } else {
+    DBG("No sec file found");
+  }
+
+  esp_sleep_enable_timer_wakeup( NextSleepTime * 1000000 ); // Sleep for secNumber seconds
+
+  ftp.CloseConnection();
 
   // Breath, without delay URL failed to update.
   delay(100);
