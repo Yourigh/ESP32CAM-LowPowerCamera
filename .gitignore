@@ -36,3 +36,5 @@
 .pioenvs
 .piolibdeps
 .vscode
+
+config.h
