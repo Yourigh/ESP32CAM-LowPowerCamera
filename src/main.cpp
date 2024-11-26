@@ -10,21 +10,15 @@ Distributed as-is; no warranty is given.
 ******************************************************************************/
 #include "Arduino.h"
 
-/* Comment this out to disable prints and save space */
-//#define BLYNK_DEBUG
-//#define BLYNK_PRINT Serial
-#define BLYNK_NO_BUILTIN
-#define BLYNK_NO_FLOAT
-
 // Enable Debug interface and serial prints over UART1
-#define DEGUB_ESP
+#define DEBUG_ESP
 
 // Blynk related Libs
 #include <WiFi.h>
 #include <WiFiClient.h>
-#include <BlynkSimpleEsp32.h>
+//#include <BlynkSimpleEsp32.h>
 #include <TimeLib.h>
-#include <WidgetRTC.h>
+//#include <WidgetRTC.h>
 
 #include "esp_camera.h"
 #include "esp_timer.h"
@@ -32,19 +26,20 @@ Distributed as-is; no warranty is given.
 
 #include "esp_http_server.h"
 #include "fb_gfx.h"
-#include "fd_forward.h"
-#include "fr_forward.h"
+//#include "fd_forward.h"
+//#include "fr_forward.h"
 //#include "soc/soc.h"           //disable brownout problems
 //#include "soc/rtc_cntl_reg.h"  //disable brownout problems
 #include "dl_lib.h"
 
+#include "config.h"
+
 // Connection timeout;
-#define CON_TIMEOUT   10*1000                     // milliseconds
+#define CON_TIMEOUT   20*1000                     // milliseconds
 
-// Not using Deep Sleep on PCB because TPL5110 timer takes over.
-#define TIME_TO_SLEEP (uint64_t)60*60*1000*1000   // microseconds
+#define TIME_TO_SLEEP (uint64_t)2*60*1000*1000   // microseconds
 
-#ifdef DEGUB_ESP
+#ifdef DEBUG_ESP
   #define DBG(x) Serial.println(x)
 #else 
   #define DBG(...)
@@ -57,40 +52,46 @@ Distributed as-is; no warranty is given.
 char auth[] = "";
 
 // Your WiFi credentials.
-char ssid[] = "";
-char pass[] = "";
+char ssid[] = mySSID;
+char pass[] = myPASSWORD;
 
 // FTP Server credentials
-char ftp_server[] = "files.000webhost.com";
-char ftp_user[]   = "";
-char ftp_pass[]   = "";
+char ftp_server[] = FTPURL;
+char ftp_user[]   = FTPuser;
+char ftp_pass[]   = FTPpass;
 
 // Camera buffer, URL and picture name
 camera_fb_t *fb = NULL;
-String pic_name = "";
-String pic_url  = "";
+String pic_name = "parking";
 
 // Variable marked with this attribute will keep its value during a deep sleep / wake cycle.
 RTC_DATA_ATTR uint64_t bootCount = 0;
 
-WidgetRTC rtc;
+//WidgetRTC rtc;
 ESP32_FTPClient ftp (ftp_server, ftp_user, ftp_pass);
 
 void deep_sleep(void);
 void FTP_upload( void );
 bool take_picture(void);
 
-BLYNK_CONNECTED()
-{
-  // Synchronize time on connection
-  rtc.begin();
-}
+//BLYNK_CONNECTED()
+//{
+//  // Synchronize time on connection
+//  rtc.begin();
+//}
 
 void setup()
 {
-#ifdef DEGUB_ESP
+#ifdef DEBUG_ESP
   Serial.begin(115200);
   Serial.setDebugOutput(true);
+  delay(1000); // Give time to the serial monitor to start
+  DBG("PROGRAM START\n");
+  // Initialize the LED pin as an output
+  pinMode(4, OUTPUT);
+  digitalWrite(4, 1);
+  delay(100);
+  digitalWrite(4, 0);
 #endif
 
   //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
@@ -159,31 +160,24 @@ void setup()
   DBG("WiFi connected");
   DBG( WiFi.localIP() );
 
-  Blynk.config( auth );
-
 }
 
 void loop()
 {
-
-  Blynk.run();
-
-  if(Blynk.connected() && timeStatus() == 2)
+  // Take picture
+  if( take_picture() )
   {
-      // Take picture
-    if( take_picture() )
-    {
-      FTP_upload();
+    FTP_upload();
 
-      deep_sleep();
-    }
-
-    else
-    {
-      DBG("Capture failed, sleeping");
-      deep_sleep();
-    }
+    deep_sleep();
   }
+
+  else
+  {
+    DBG("Capture failed, sleeping");
+    deep_sleep();
+  }
+
 
   if( millis() > CON_TIMEOUT)
   {
@@ -228,19 +222,12 @@ void FTP_upload()
   
   //Create a file and write the image data to it;
   ftp.InitFile("Type I");
-  ftp.ChangeWorkDir("/public_html/zyro/gallery_gen/"); // change it to reflect your directory
+  ftp.ChangeWorkDir("/media/"); // change it to reflect your directory
   const char *f_name = pic_name.c_str();
   ftp.NewFile( f_name );
   ftp.WriteData(fb->buf, fb->len);
   ftp.CloseFile();
 
-  // Change URL on Blynk App
-  pic_url += pic_name;
-  DBG("Change App URL to: ");
-  DBG( pic_url );
-  Blynk.setProperty(V0, "url", 1, pic_url);
-
-  // Breath, withouth delay URL failed to update.
+  // Breath, without delay URL failed to update.
   delay(100);
-
 }
