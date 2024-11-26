@@ -62,7 +62,7 @@ char ftp_pass[]   = FTPpass;
 
 // Camera buffer, URL and picture name
 camera_fb_t *fb = NULL;
-String pic_name = "parking";
+String pic_name = "parking.jpg";
 
 // Variable marked with this attribute will keep its value during a deep sleep / wake cycle.
 RTC_DATA_ATTR uint64_t bootCount = 0;
@@ -88,10 +88,10 @@ void setup()
   delay(1000); // Give time to the serial monitor to start
   DBG("PROGRAM START\n");
   // Initialize the LED pin as an output
-  pinMode(4, OUTPUT);
-  digitalWrite(4, 1);
-  delay(100);
-  digitalWrite(4, 0);
+  //pinMode(4, OUTPUT);
+  //digitalWrite(4, 1);
+  //delay(100);
+  //digitalWrite(4, 0);
 #endif
 
   //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
@@ -111,8 +111,8 @@ void setup()
   config.pin_pclk     = 22;
   config.pin_vsync    = 25;
   config.pin_href     = 23;
-  config.pin_sscb_sda = 26;
-  config.pin_sscb_scl = 27;
+  config.pin_sccb_sda = 26;
+  config.pin_sccb_scl = 27;
   config.pin_pwdn     = 32;
   config.pin_reset    = -1;
   config.xclk_freq_hz = 20000000;
@@ -208,7 +208,6 @@ bool take_picture()
   }
   
   // Rename the picture with the time string
-  pic_name += String( now() ) + ".jpg";
   DBG("Camera capture success, saved as:");
   DBG( pic_name );
 
